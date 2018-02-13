@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include "search.h"
 
 #define READ_END 0
 #define WRITE_END 1
@@ -45,9 +46,9 @@ int main (int argc, char **argv)
         }
     }
     
-    int fd[2];
+    int p_to_c[2];
+    int c_to_p[2];
     int num_files = --argc;
-    pid_t processes[num_files];
     
     /* Get search string from user. */
     printf("Enter a string to search for: ");
@@ -59,19 +60,25 @@ int main (int argc, char **argv)
     if (to_search[len - 1] == '\n')
         to_search[len - 1] = '\0';
     
-    pid_t pid, cpid, wpid;
+    pid_t pid, wpid;
     
     for (int i = 0; i < num_files; i++)
     {
-        /* Create the pipe. */
-        if (pipe(fd) == -1)
+        /* Create the pipe from parent to child. */
+        if (pipe(p_to_c) == -1)
         {
             fprintf (stderr, "Pipe failed.\n");
             return 1;
         }
         
-        pid = fork ();
+        /* Create the pipe from child to parent. */
+        if (pipe(c_to_p) == -1)
+        {
+            fprintf (stderr, "Pipe failed.\n");
+            return 1;
+        }
         
+        pid = fork();
         if (pid < 0)
         {
             fprintf (stderr, "Fork failed.\n");
@@ -79,40 +86,44 @@ int main (int argc, char **argv)
         }
         
         /* Parent. */
-        if (pid)
+        else if (pid)
         {
-            close (fd[READ_END]);
+            close (p_to_c[READ_END]);
+            close (c_to_p[WRITE_END]);
             
-            write (fd[WRITE_END], to_search, strlen(to_search) + 1);
+            write (p_to_c[WRITE_END], to_search, strlen(to_search) + 1);
+            close (p_to_c[WRITE_END]);
             
-            close (fd[WRITE_END]);
-
+            int p_read_msg;
+            read (c_to_p[READ_END], &p_read_msg, 2);
+            
+            close (c_to_p[READ_END]);
+            printf ("Got from child: %d\n", p_read_msg);
+            
             continue;
-            wait(0);
         }
         
         /* Child. */
         else
         {
-            char read_msg[32];
-            close (fd[WRITE_END]);
+            char c_read_msg[32];
+            close (p_to_c[WRITE_END]);
+            close (c_to_p[READ_END]);
             
-            read (fd[READ_END], read_msg, 32);
-            printf("Got from parent through pipe :%s:\n", read_msg);
+            read (p_to_c[READ_END], c_read_msg, 32);
+            close (p_to_c[READ_END]);
+            printf("Child of: %d \t My pid: %d \t\t Message: %s\n"
+                   , getppid(), getpid(), c_read_msg);
             
-            close(fd[WRITE_END]);
+            int count = search_for (argv[i + 1], c_read_msg);
             
-            cpid = getpid();
-            printf ("Child %d pid: %d. My parent is: %d File is: %s\n"
-                   , i, cpid, getppid(), argv[i + 1]);
-            processes[i] = cpid;
-            
-            while (1)
-                ;
-            
+            write (c_to_p[WRITE_END], &count, 2);
+            close (c_to_p[WRITE_END]);
             break;
         }
+
     }
+    
     while ((wpid = wait(0)) > 0);
     return 0;
 }
