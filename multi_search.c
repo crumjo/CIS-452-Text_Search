@@ -68,9 +68,9 @@ int main (int argc, char **argv)
         printf ("Pass file name(s) as arguments.\n");
         return 1;
     }
-    else if (argc > 11)
+    else if (argc > 4)
     {
-        printf ("No more than 10 files can be processed.\n");
+        printf ("No more than 3 files can be processed.\n");
         exit (0);
     }
     
@@ -103,7 +103,7 @@ int main (int argc, char **argv)
     }
     
     int pid_size;
-    pid_t ppid, wpid;
+    pid_t ppid;
     pid_t which_file[argc];
     
     for (int i = 0; i < num_files; i++)
@@ -191,22 +191,40 @@ int main (int argc, char **argv)
             {
                 if ((write (p_to_c[WRITE_END], &to_search, size)) == -1)
                 {
-                    fprintf (stderr, "Pipe write failed.\n");
+                    fprintf (stderr, "Parent pipe write failed.\n");
                     return 1;
                 }
             }
             
             for (int j = 0; j < num_files; j++)
             {
-                int val;
+                int c_pid, file_pos, val;
+                
+                /* Read pid of child writing to pipe. */
+                if ((read (c_to_p[READ_END], &c_pid, pid_size)) == -1)
+                {
+                    fprintf(stderr, "Parent pid read failed.\n");
+                }
+                
+                /* Read occurences of search string from child. */
                 if ((read (c_to_p[READ_END], &val, pid_size)) == -1)
                 {
-                    fprintf(stderr, "Read failed.\n");
+                    fprintf(stderr, "Parent read failed.\n");
                     return 1;
                 }
-                printf ("Count from child: %d\n", val);
+                
+                /* Figure out which child read which file. */
+                for (int k = 0; k < num_files; k++)
+                {
+                    if (c_pid == pros[k])
+                    {
+                        file_pos = k;
+                    }
+                }
+                
+                printf ("> Child [%d] found %d occurence(s) of '%s' in %s.\n",
+                        c_pid, val, to_search, argv[file_pos + 1]);
             }
-
         }
     }
     
@@ -224,23 +242,37 @@ int main (int argc, char **argv)
                 }
             }
             
+            pid_t my_pid = getpid();
             char c_read[1024];
+            
+            /* Read search string from parent. */
             if ((read (p_to_c[READ_END], &c_read, 1024)) == -1)
             {
                 fprintf(stderr, "Pipe read failed.\n");
                 return 1;
             }
-            printf ("Child [%d] searching for '%s' in %s\n"
-                    , getpid(), c_read, filename);
+            
+            printf ("Child [%d] searching for '%s' in %s...\n",
+                    getpid(), c_read, filename);
             
             int count = search_for (filename, c_read);
             
-            write (c_to_p[WRITE_END], &count, sizeof(count));
+            /* Write child pid to parent. */
+            if ((write (c_to_p[WRITE_END], &my_pid, sizeof(my_pid))) == -1)
+            {
+                fprintf(stderr, "Child pid write failed.\n");
+            }
+            
+            /* Write count for search string to parent. */
+            if ((write (c_to_p[WRITE_END], &count, sizeof(count))) == -1)
+            {
+                fprintf(stderr, "Child count write failed.\n");
+                return 1;
+            }
+            
             //free (filename);
         }
     }
-    
-    while ((wpid = wait(0)) > 0);
     
     return 0;
 }
