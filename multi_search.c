@@ -28,8 +28,8 @@ pid_t pros[10];
 
 
 /**
- * Handles the shutdown of the program and its child processes when
- * ctrl+c is pressed.
+ * Handles the shutdown of the program and its child processes when ctrl+c is
+ * pressed.
  *
  * @param sigNum the signal number for ctrl+c.
  */
@@ -57,7 +57,12 @@ void sigHandler (int sigNum) {
 
 
 /**
- *
+ * Main method that accepts file names as parameters, checks if they exist,
+ * and then spawns a child searcher process for each file. The parent process
+ * gets input from the user and sends it to the child processes through a pipe.
+ * The child processes search for the string in the file, and send its
+ * frequency to the parent. The parent continues accepting user input until
+ * crtl+c is pressed.
  */
 int main (int argc, char **argv)
 {
