@@ -52,32 +52,33 @@ int main (int argc, char **argv)
     
     /* Get search string from user. */
     printf("Enter a string to search for: ");
-    char to_search[32];
-    fgets(to_search, 32, stdin);
+    char to_search[1024];
+    fgets(to_search, 1024, stdin);
     
     /* Remove trailing newline. */
     int len = strlen(to_search);
     if (to_search[len - 1] == '\n')
         to_search[len - 1] = '\0';
     
-    pid_t pid, wpid;
+    /* Create the pipe from parent to child. */
+    if (pipe(p_to_c) == -1)
+    {
+        fprintf (stderr, "Pipe failed.\n");
+        return 1;
+    }
+    
+    /* Create the pipe from child to parent. */
+    if (pipe(c_to_p) == -1)
+    {
+        fprintf (stderr, "Pipe failed.\n");
+        return 1;
+    }
+    
+    pid_t pid, ppid, wpid;
     pid_t pros[argc];
     
     for (int i = 0; i < num_files; i++)
     {
-        /* Create the pipe from parent to child. */
-        if (pipe(p_to_c) == -1)
-        {
-            fprintf (stderr, "Pipe failed.\n");
-            return 1;
-        }
-        
-        /* Create the pipe from child to parent. */
-        if (pipe(c_to_p) == -1)
-        {
-            fprintf (stderr, "Pipe failed.\n");
-            return 1;
-        }
         
         pid = fork();
         if (pid < 0)
@@ -89,55 +90,68 @@ int main (int argc, char **argv)
         /* Parent. */
         else if (pid)
         {
+            ppid = getpid();
             pros[i] = pid;
-
+            
             close (p_to_c[READ_END]);
             close (c_to_p[WRITE_END]);
             
-            write (p_to_c[WRITE_END], to_search, strlen(to_search) + 1);
-            close (p_to_c[WRITE_END]);
-            
-            int p_read_msg;
-            read (c_to_p[READ_END], &p_read_msg, 2);
-            printf ("Receiving data from child...\n");
-
-            close (c_to_p[READ_END]);
-            printf ("Got from child: %d\n", p_read_msg);
-            printf ("The word '%s' occurs in %s %d time(s).\n\n"
-                    , to_search, argv[i+1], p_read_msg);
             continue;
         }
         
         /* Child. */
         else
         {
-            sleep(2);
-            printf ("Creating child process...\n");
-            char c_read_msg[32];
+            printf ("Creating child process [%d]...\n", getpid());
+            
             close (p_to_c[WRITE_END]);
             close (c_to_p[READ_END]);
             
-            read (p_to_c[READ_END], c_read_msg, 32);
-            close (p_to_c[READ_END]);
-            printf("Child of: %d \t My pid: %d \t\t Message: %s\n\n"
-                   , getppid(), getpid(), c_read_msg);
-            
-            int count = search_for (argv[i + 1], c_read_msg);
-            
-            write (c_to_p[WRITE_END], &count, 2);
-            close (c_to_p[WRITE_END]);
             break;
         }
-
+        
     }
-
+    
+    int size = sizeof(to_search);
+    printf("Size: %d\n", size);
+    
+    /* Parent write to pipe. */
+    int temp = getpid();
+    
+    if (temp == ppid)
+    {
+        for (int i = 0; i < num_files; i++)
+        {
+            printf("Parent writing to pipe with pid %d...\n", ppid);
+            if ((write (p_to_c[WRITE_END], &to_search, size)) == -1)
+            {
+                fprintf (stderr, "Pipe write failed.\n");
+                return 1;
+            }
+        }
+    }
+    
+    /* Child reads from pipe. */
+    else
+    {
+        printf("\nChild %d reading from pipe...\n", getpid());
+        char c_read[size];
+        if ((read (p_to_c[READ_END], &c_read, size)) == -1)
+        {
+            fprintf(stderr, "Pipe read failed.\n");
+            return 1;
+        }
+        printf ("[%d] Pipe reading: %s\n", getpid(), c_read);
+    }
+    
     while ((wpid = wait(0)) > 0);
     
-//    printf("All child processes: \n");
-//    for(int i = 0; i < 2; i++)
-//    {
-//        printf("%d\n", pros[i]);
-//    }
+    //    printf("All child processes: \n");
+    //    for(int i = 0; i < 2; i++)
+    //    {
+    //        printf("%d\n", pros[i]);
+    //    }
     
     return 0;
 }
+

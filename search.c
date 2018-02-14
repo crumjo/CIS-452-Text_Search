@@ -12,7 +12,7 @@
 int search_for (char *fname, char *s_for)
 {
     int count = 0;
-    char read[20];
+    char read[128];
 
     FILE *file = fopen (fname, "r");
 
