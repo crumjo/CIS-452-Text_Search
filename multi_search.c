@@ -209,6 +209,7 @@ int main (int argc, char **argv)
                 if ((read (c_to_p[READ_END], &c_pid, pid_size)) == -1)
                 {
                     fprintf(stderr, "Parent pid read failed.\n");
+                    return 1;
                 }
                 
                 /* Read occurences of search string from child. */
@@ -266,6 +267,7 @@ int main (int argc, char **argv)
             if ((write (c_to_p[WRITE_END], &my_pid, sizeof(my_pid))) == -1)
             {
                 fprintf(stderr, "Child pid write failed.\n");
+                return 1;
             }
             
             /* Write count for search string to parent. */
