@@ -1,7 +1,7 @@
 /**
- * A multi-threaded text search that takes file
- * names from the command line and prompts the user
- * to enter text to search for.
+ * A multi-threaded text search that takes file names from the command line.
+ * Prompts the user to enter text to search for and prints out the frequency
+ * of the text.
  *
  * @author Joshua Crum
  * @version 2/13/2018
@@ -89,7 +89,10 @@ int main (int argc, char **argv)
         }
     }
     
+    /* Parent to child pipe. */
     int p_to_c[2];
+    
+    /* Child to parent pipe. */
     int c_to_p[2];
     num_files = --argc;
     
@@ -109,13 +112,16 @@ int main (int argc, char **argv)
     
     int pid_size;
     pid_t ppid;
+    
+    /* To figure out which child has which file. */
     pid_t which_file[argc];
     
+    /* Create the child processes. */
     for (int i = 0; i < num_files; i++)
     {
-        
         pid = fork();
         pid_size = sizeof(pid);
+        
         if (pid < 0)
         {
             fprintf (stderr, "Fork failed.\n");
@@ -137,12 +143,12 @@ int main (int argc, char **argv)
             which_file[i] = getpid();
             break;
         }
-        
     }
     
+    /* Current pid. */
     int temp = getpid();
     
-    /* Close unused pipe ends. */
+    /* Close unused parent pipe ends. */
     if (temp == ppid)
     {
         if ((close (p_to_c[READ_END])) == -1)
@@ -192,6 +198,7 @@ int main (int argc, char **argv)
             
             int size = sizeof(to_search);
             
+            /* Write for each child. */
             for (int i = 0; i < num_files; i++)
             {
                 if ((write (p_to_c[WRITE_END], &to_search, size)) == -1)
@@ -240,6 +247,8 @@ int main (int argc, char **argv)
         while (1)
         {
             char *filename = (char *) malloc (32 * sizeof(char));
+            
+            /* Calculate the file for the current child. */
             for(int i = 0; i < num_files; i++)
             {
                 if (which_file[i] == getpid())
@@ -276,8 +285,6 @@ int main (int argc, char **argv)
                 fprintf(stderr, "Child count write failed.\n");
                 return 1;
             }
-            
-            //free (filename);
         }
     }
     
